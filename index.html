@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Oilaviy Shajara</title>
+  <style>
+    * { box-sizing: border-box; font-family: Arial, sans-serif; }
+    body { margin: 0; background: #f4f6f9; color: #1f2937; }
+    header {
+      background: #1e3a8a; color: #fff; padding: 14px 20px;
+      display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;
+    }
+    .container { max-width: 1100px; margin: 20px auto; padding: 0 16px; }
+    .card {
+      background: #fff; border-radius: 10px; padding: 18px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06); margin-bottom: 16px;
+    }
+    input, select, button, textarea {
+      padding: 9px 12px; border-radius: 7px; border: 1px solid #cbd5e1; font-size: 14px;
+    }
+    button {
+      background: #2563eb; color: #fff; border: none; cursor: pointer; font-weight: 600;
+    }
+    button:hover { background: #1d4ed8; }
+    button.secondary { background: #64748b; }
+    button.secondary:hover { background: #475569; }
+    button.danger { background: #dc2626; }
+    button.danger:hover { background: #b91c1c; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { border: 1px solid #e2e8f0; padding: 9px; text-align: left; font-size: 14px; }
+    th { background: #f1f5f9; }
+    .hidden { display: none; }
+    .msg { margin-top: 10px; font-size: 14px; color: #b91c1c; }
+    .ok { color: #15803d; }
+    .row-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div><strong>Oilaviy Shajara</strong></div>
+  <div id="userBar" class="row-actions hidden">
+    <span id="userInfo"></span>
+    <button class="secondary" onclick="logout()">Chiqish</button>
+  </div>
+</header>
+
+<div class="container">
+  <!-- LOGIN PANEL -->
+  <div id="loginBox" class="card" style="max-width: 420px; margin: 40px auto;">
+    <h2 style="margin-top: 0;">Tizimga kirish</h2>
+    <div style="display: flex; flex-direction: column; gap: 10px;">
+      <input type="text" id="loginInput" placeholder="Login" />
+      <input type="password" id="passwordInput" placeholder="Parol" />
+      <button id="loginBtn" onclick="login()">Kirish</button>
+    </div>
+    <div id="loginMsg" class="msg"></div>
+  </div>
+
+  <!-- MAIN APP -->
+  <div id="appBox" class="hidden">
+    <div class="card">
+      <div class="row-actions" style="justify-content: space-between;">
+        <div class="row-actions">
+          <label for="listSelect"><strong>Shajara oynasi:</strong></label>
+          <select id="listSelect" onchange="onListChange()"></select>
+        </div>
+        <div id="adminControls" class="row-actions hidden">
+          <input type="text" id="newListName" placeholder="Yangi oyna nomi" />
+          <button onclick="addList()">Oyna qo‘shish</button>
+          <button class="danger" onclick="deleteCurrentList()">Oynani o‘chirish</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top: 0;">Shaxs qo‘shish / tahrirlash</h3>
+      <input type="hidden" id="editId" />
+      <div class="grid">
+        <input type="text" id="fullName" placeholder="F.I.Sh. (masalan: Karimov Ali)" />
+        <input type="text" id="birthYear" placeholder="Tug‘ilgan yili (masalan: 1965)" />
+        <input type="text" id="deathYear" placeholder="Vafot etgan yili (ixtiyoriy)" />
+        <input type="text" id="parentId" placeholder="Ota/Ona ID (ixtiyoriy)" />
+        <input type="text" id="spouseName" placeholder="Jufti / Nikoh (ixtiyoriy)" />
+        <input type="text" id="notes" placeholder="Izoh (ixtiyoriy)" />
+      </div>
+      <div class="row-actions" style="margin-top: 12px;">
+        <button onclick="saveMember()">Saqlash</button>
+        <button class="secondary" onclick="clearForm()">Tozalash</button>
+      </div>
+      <div id="appMsg" class="msg"></div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top: 0;">A’zolar ro‘yxati</h3>
+      <div style="overflow-x: auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>F.I.Sh.</th>
+              <th>Tug‘ilgan</th>
+              <th>Vafot</th>
+              <th>Ota/Ona ID</th>
+              <th>Nikoh</th>
+              <th>Izoh</th>
+              <th>Amallar</th>
+            </tr>
+          </thead>
+          <tbody id="membersBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const API_URL = 'https://script.google.com/macros/s/AKfycbw2DZ8M0dixbHBlm6Sme7KROzILTB8UoQRqvKZ12UgbhVFFpWw29xH-7djGIbuHfub3Fw/exec';
+
+  let state = {
+    login: '',
+    password: '',
+    role: 'user',
+    lists: [],
+    currentListId: '',
+    members: [],
+    marriages: []
+  };
+
+  async function api(payload) {
+    const res = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload)
+    });
+    return await res.json();
+  }
+
+  async function login() {
+    const loginVal = document.getElementById('loginInput').value.trim();
+    const passwordVal = document.getElementById('passwordInput').value.trim();
+    const msgEl = document.getElementById('loginMsg');
+    msgEl.textContent = '';
+
+    if (!loginVal || !passwordVal) {
+      msgEl.textContent = 'Login va parolni kiriting.';
+      return;
+    }
+
+    const btn = document.getElementById('loginBtn');
+    btn.disabled = true;
+    btn.textContent = 'Tekshirilmoqda...';
+
+    try {
+      const data = await api({ action: 'login', login: loginVal, password: passwordVal });
+      if (!data.success) {
+        msgEl.textContent = data.message || 'Login yoki parol xato.';
+        return;
+      }
+
+      state.login = loginVal;
+      state.password = passwordVal;
+      state.role = data.role || 'user';
+      state.lists = data.lists || [];
+      state.members = data.members || [];
+      state.marriages = data.marriages || [];
+      state.currentListId = state.lists[0]?.id || state.lists[0]?.name || '';
+
+      document.getElementById('loginBox').classList.add('hidden');
+      document.getElementById('appBox').classList.remove('hidden');
+      document.getElementById('userBar').classList.remove('hidden');
+      document.getElementById('userInfo').textContent = `${state.login} (${state.role})`;
+
+      if (state.role === 'admin') {
+        document.getElementById('adminControls').classList.remove('hidden');
+      } else {
+        document.getElementById('adminControls').classList.add('hidden');
+      }
+
+      renderLists();
+      renderMembers();
+    } catch (e) {
+      msgEl.textContent = 'Serverga ulanishda xatolik: ' + e.message;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Kirish';
+    }
+  }
+
+  function logout() {
+    state = { login: '', password: '', role: 'user', lists: [], currentListId: '', members: [], marriages: [] };
+    document.getElementById('appBox').classList.add('hidden');
+    document.getElementById('userBar').classList.add('hidden');
+    document.getElementById('loginBox').classList.remove('hidden');
+    document.getElementById('passwordInput').value = '';
+  }
+
+  function renderLists() {
+    const sel = document.getElementById('listSelect');
+    sel.innerHTML = '';
+    state.lists.forEach(item => {
+      const val = item.id || item.name || item;
+      const label = item.name || item.id || item;
+      const opt = document.createElement('option');
+      opt.value = val;
+      opt.textContent = label;
+      if (val === state.currentListId) opt.selected = true;
+      sel.appendChild(opt);
+    });
+  }
+
+  function onListChange() {
+    state.currentListId = document.getElementById('listSelect').value;
+    clearForm();
+    renderMembers();
+  }
+
+  function renderMembers() {
+    const tbody = document.getElementById('membersBody');
+    tbody.innerHTML = '';
+
+    const filtered = state.members.filter(m => {
+      if (!state.currentListId) return true;
+      const listKey = m.listId || m.list || m.oyna || '';
+      return !listKey || String(listKey) === String(state.currentListId);
+    });
+
+    if (filtered.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">Ma’lumot topilmadi</td></tr>';
+      return;
+    }
+
+    filtered.forEach(m => {
+      const id = m.id || '';
+      const marriage = state.marriages.find(x => String(x.memberId || x.id) === String(id));
+      const spouse = m.spouseName || marriage?.spouseName || marriage?.spouse || '';
+
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${escapeHtml(id)}</td>
+        <td>${escapeHtml(m.fullName || m.name || '')}</td>
+        <td>${escapeHtml(m.birthYear || '')}</td>
+        <td>${escapeHtml(m.deathYear || '')}</td>
+        <td>${escapeHtml(m.parentId || '')}</td>
+        <td>${escapeHtml(spouse)}</td>
+        <td>${escapeHtml(m.notes || '')}</td>
+        <td class="row-actions">
+          <button onclick='startEdit(${JSON.stringify(id)})'>Tahrir</button>
+          <button class="danger" onclick='deleteMember(${JSON.stringify(id)})'>O‘chirish</button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  function startEdit(id) {
+    const m = state.members.find(x => String(x.id) === String(id));
+    if (!m) return;
+    document.getElementById('editId').value = m.id || '';
+    document.getElementById('fullName').value = m.fullName || m.name || '';
+    document.getElementById('birthYear').value = m.birthYear || '';
+    document.getElementById('deathYear').value = m.deathYear || '';
+    document.getElementById('parentId').value = m.parentId || '';
+    document.getElementById('spouseName').value = m.spouseName || '';
+    document.getElementById('notes').value = m.notes || '';
+  }
+
+  function clearForm() {
+    document.getElementById('editId').value = '';
+    document.getElementById('fullName').value = '';
+    document.getElementById('birthYear').value = '';
+    document.getElementById('deathYear').value = '';
+    document.getElementById('parentId').value = '';
+    document.getElementById('spouseName').value = '';
+    document.getElementById('notes').value = '';
+    document.getElementById('appMsg').textContent = '';
+  }
+
+  async function saveMember() {
+    const msgEl = document.getElementById('appMsg');
+    msgEl.className = 'msg';
+    msgEl.textContent = '';
+
+    const fullName = document.getElementById('fullName').value.trim();
+    if (!fullName) {
+      msgEl.textContent = 'F.I.Sh. ni kiriting.';
+      return;
+    }
+
+    const member = {
+      id: document.getElementById('editId').value.trim() || undefined,
+      listId: state.currentListId,
+      fullName,
+      birthYear: document.getElementById('birthYear').value.trim(),
+      deathYear: document.getElementById('deathYear').value.trim(),
+      parentId: document.getElementById('parentId').value.trim(),
+      spouseName: document.getElementById('spouseName').value.trim(),
+      notes: document.getElementById('notes').value.trim()
+    };
+
+    const res = await api({
+      action: 'saveMember',
+      login: state.login,
+      password: state.password,
+      member,
+      relation: { listId: state.currentListId, spouseName: member.spouseName }
+    });
+
+    if (!res.success) {
+      msgEl.textContent = res.message || 'Saqlashda xatolik.';
+      return;
+    }
+
+    if (res.members) state.members = res.members;
+    if (res.marriages) state.marriages = res.marriages;
+    clearForm();
+    renderMembers();
+    msgEl.className = 'msg ok';
+    msgEl.textContent = 'Saqlandi.';
+  }
+
+  async function deleteMember(id) {
+    if (!confirm('Ushbu yozuvni o‘chirishni tasdiqlaysizmi?')) return;
+    const res = await api({
+      action: 'deleteMember',
+      login: state.login,
+      password: state.password,
+      id
+    });
+    if (res.success) {
+      if (res.members) state.members = res.members;
+      renderMembers();
+    } else {
+      alert(res.message || 'O‘chirishda xatolik.');
+    }
+  }
+
+  async function addList() {
+    const name = document.getElementById('newListName').value.trim();
+    if (!name) return;
+    const res = await api({
+      action: 'addList',
+      login: state.login,
+      password: state.password,
+      nomi: name
+    });
+    if (res.success) {
+      document.getElementById('newListName').value = '';
+      if (res.lists) {
+        state.lists = res.lists;
+        state.currentListId = state.lists[state.lists.length - 1]?.id || state.lists[state.lists.length - 1]?.name || name;
+      }
+      renderLists();
+      renderMembers();
+    } else {
+      alert(res.message || 'Oyna qo‘shishda xatolik.');
+    }
+  }
+
+  async function deleteCurrentList() {
+    if (!state.currentListId) return;
+    const confirmPassword = prompt('Oynani o‘chirish uchun parolingizni kiriting:');
+    if (!confirmPassword) return;
+
+    const res = await api({
+      action: 'deleteList',
+      login: state.login,
+      password: state.password,
+      listId: state.currentListId,
+      confirmPassword
+    });
+    if (res.success) {
+      if (res.lists) {
+        state.lists = res.lists;
+        state.currentListId = state.lists[0]?.id || state.lists[0]?.name || '';
+      }
+      renderLists();
+      renderMembers();
+    } else {
+      alert(res.message || 'O‘chirishda xatolik.');
+    }
+  }
+
+  function escapeHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+</script>
+</body>
+</html>
